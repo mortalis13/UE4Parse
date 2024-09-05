@@ -84,12 +84,18 @@ class LegacyPackageReader(Package):
 
     # @profile
     def __init__(self, uasset: BinaryStream, uexp: BinaryStream = None, ubulk: BinaryStream = None,
-                 provider: "DefaultFileProvider" = None, load_mode: EPackageLoadMode = EPackageLoadMode.Full) -> None:
-        FAssetReader.provider = provider
+                 provider: "DefaultFileProvider" = None, load_mode: EPackageLoadMode = EPackageLoadMode.Full,
+                 version: EUEVersion = EUEVersion.LATEST) -> None:
+        if provider:
+            FAssetReader.provider = provider
+            version = provider.Versions.UEVersion
+
         self.reader = FAssetReader(uasset.base_stream, self, size=uasset.size)
-        self.reader.mappings = uasset.mappings
-        self.reader.set_ar_version(provider.Versions.UEVersion)
+        self.reader.set_ar_version(version)
         self.reader.PackageReader = self
+
+        if hasattr(uasset, 'mappings'):
+            self.reader.mappings = uasset.mappings
 
         self.PackageFileSummary = FPackageFileSummary(self.reader)
         self.Summary = self.PackageFileSummary
@@ -108,8 +114,7 @@ class LegacyPackageReader(Package):
 
         if uexp is not None:
             self.reader = FAssetReader(uexp, self, uexp.size, uasset.size)
-            self.reader.mappings = uasset.mappings
-            self.reader.set_ar_version(provider.Versions.UEVersion)
+            self.reader.set_ar_version(version)
             self.reader.PackageReader = self
 
         self.reader.ubulk_stream = ubulk
@@ -150,9 +155,10 @@ class LegacyPackageReader(Package):
                     f"Didn't read ExportType {ExportType.string} properly, at {position}, should be: {pos + Export.SerialSize} behind: {pos + Export.SerialSize - position}")
 
             # export event
-            trigger = provider.Triggers.get(ExportType.string, False)
-            if trigger:
-                trigger(ExportData)
+            if provider:
+                trigger = provider.Triggers.get(ExportType.string, False)
+                if trigger:
+                    trigger(ExportData)
 
     def SerializeNameMap(self):
         if self.PackageFileSummary.NameCount > 0:
